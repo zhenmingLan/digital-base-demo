@@ -1,0 +1,32 @@
+window.DESIGN_DATA=(()=>{
+'use strict';const key='design-road-v1';
+const seed={params:{name:'K线 · XX高速主线',start:10000,end:15000,lanes:4,laneWidth:3.75,shoulder:4.5,median:2,spans:4,spanLength:30,pierHeight:16,tunnelLength:800,tunnelRadius:6,lining:.6,curve:18},coordinate:{system:'CGCS2000',projection:'Gauss-Kruger',zone:'3° 分带',meridian:111,east:500000,north:0,elevation:0},models:{},issues:[],shares:[]};let saved;try{saved=JSON.parse(sessionStorage.getItem(key));}catch{}const state={...seed,...saved,params:{...seed.params,...saved?.params},coordinate:{...seed.coordinate,...saved?.coordinate}};
+state.uploads=state.uploads||[];state.deleted=state.deleted||[];
+const groups=[{id:'road',name:'路',title:'道路工程',place:'K10+000 — K12+000'},{id:'bridge',name:'桥',title:'桥梁工程',place:'K12+350 大桥'},{id:'tunnel',name:'隧',title:'隧道工程',place:'K14+000 隧道'}];
+function baseFiles(){return groups.flatMap(g=>[{id:g.id+'-model',code:{road:'DES-RD-001',bridge:'DES-BR-001',tunnel:'DES-TN-001'}[g.id],name:g.title+'设计模型',format:'MODEL',kind:'文件',group:g.id,version:state.models[g.id]?.version||'V1',status:'设计中',source:state.models[g.id]?'参数化生成 · 前端示例':'预置设计模型',updated:state.models[g.id]?.updated||'2026-09-14',owner:'设计一组'}, {id:g.id+'-drawing',code:'DES-'+g.id.toUpperCase()+'-002',name:{road:'路线平纵面与标准横断面图',bridge:'桥梁总体布置与桥墩构造图',tunnel:'隧道总体布置与衬砌断面图'}[g.id],format:'PDF',kind:'文件',group:g.id,version:'V2',status:'待校审',source:'设计图纸示例',updated:'2026-09-14',owner:'专业设计组'}, {id:g.id+'-data',code:'DES-'+g.id.toUpperCase()+'-003',name:{road:'K线 EI 设计数据包',bridge:'桥梁跨径与结构参数表',tunnel:'隧道洞身与断面参数表'}[g.id],format:g.id==='road'?'EI':'XLSX',kind:'文件',group:g.id,version:'V1',status:'设计中',source:'结构化设计数据示例',updated:'2026-09-14',owner:'专业设计组'}]);}
+const folders=[
+ ['road-route','路线设计','road'],['road-pavement','路基路面','road'],['road-drainage','排水与防护','road'],['road-models','三维模型','road'],
+ ['bridge-general','总体布置','bridge'],['bridge-upper','上部结构','bridge'],['bridge-lower','下部结构','bridge'],['bridge-models','三维模型','bridge'],
+ ['tunnel-general','总体设计','tunnel'],['tunnel-lining','洞身与衬砌','tunnel'],['tunnel-portal','洞口工程','tunnel'],['tunnel-models','三维模型','tunnel']
+].map(([id,name,group])=>({id,name,group,parent:group,code:'DIR-'+id.toUpperCase(),kind:'文件夹',version:'目录快照'}));
+const extra=[
+ ['road-route','路线平面设计图','PDF'],['road-route','路线纵断面设计图','PDF'],['road-pavement','标准横断面设计图','PDF'],['road-pavement','路基土石方数量表','XLSX'],['road-pavement','路面结构设计说明','PDF'],['road-drainage','边沟与截水沟设计图','PDF'],['road-drainage','边坡防护设计图','PDF'],
+ ['bridge-general','桥梁设计说明','PDF'],['bridge-upper','预应力箱梁一般构造图','PDF'],['bridge-upper','桥面铺装与防撞护栏设计图','PDF'],['bridge-lower','桥墩与盖梁构造图','PDF'],['bridge-lower','承台与桩基础设计图','PDF'],
+ ['tunnel-general','隧道纵断面设计图','PDF'],['tunnel-lining','复合式衬砌设计图','PDF'],['tunnel-lining','初期支护参数表','XLSX'],['tunnel-portal','洞门一般构造图','PDF'],['tunnel-portal','洞口边仰坡防护设计图','PDF']
+];
+const eiSamples=['ICD','SQX','DMX','TXT','HDX','GZX'].map((format,i)=>({id:'ei-sample-'+format.toLowerCase(),code:'EI-K-'+String(i+1).padStart(3,'0'),name:'K主线示例.'+format,format,kind:'文件',group:'road',parent:'road-route',version:'V1',status:'示例数据',owner:'路线设计组',source:'预置 EI 示例索引',example:true,size:2048+i*1024,updated:'2026-09-14'}));
+function allFiles(){return [...baseFiles().map(f=>({...f,parent:f.format==='MODEL'?f.group+'-models':{road:'road-route',bridge:'bridge-general',tunnel:'tunnel-general'}[f.group]})),...extra.map(([parent,name,format],i)=>({id:'design-detail-'+i,code:'DES-D-'+String(i+1).padStart(3,'0'),name,format,kind:'文件',group:folders.find(f=>f.id===parent).group,parent,version:'V1',status:'设计中',owner:'专业设计组',source:'专业设计资料示例',updated:'2026-09-14'})),...eiSamples,...state.uploads];}
+function files(){return allFiles().filter(f=>!state.deleted.includes(f.id));}
+function folderFiles(id){return files().filter(f=>id==='root'||f.group===id||f.parent===id);}
+function children(id){return id==='root'?groups.map(g=>object(g.id)):folders.some(f=>f.id===id)?files().filter(f=>f.parent===id):folders.filter(f=>f.parent===id);}
+function path(id){const o=object(id);if(!o)return '';if(id==='root')return '设计成果';const group=groups.find(g=>g.id===o.group);const parent=folders.find(f=>f.id===o.parent);return ['设计成果',group?.name,parent?.name,o.name===group?.name?null:o.name].filter(Boolean).join(' / ');}
+function components(){const cs=[['RD-PAVE','主线路面','road','路面结构'],['RD-MEDIAN','中央分隔带','road','道路附属'],['BR-DECK','桥梁上部梁体','bridge','上部结构'],['TN-LINING','隧道衬砌','tunnel','衬砌结构'],['TN-PAVE','隧道路面','tunnel','路面结构'],['TN-PORTAL','隧道洞门','tunnel','洞门结构']];const n=(state.models.bridge?.params||state.params).spans;for(let i=1;i<n;i++)cs.push(['BR-PIER-'+i,'P'+i+'号桥墩','bridge','下部结构']);return cs.filter(c=>files().some(f=>f.id===c[2]+'-model')).map(([id,name,group,type])=>({id,code:id,name,group,type,kind:'构件',file:group+'-model',version:state.models[group]?.version||'V1',status:'设计中'}));}
+function object(id){if(id==='root')return{id:'root',code:'DESIGN-ROOT',name:'设计成果',kind:'文件夹',version:'目录快照'};const g=groups.find(g=>g.id===id);if(g)return{...g,code:'DIR-'+id.toUpperCase(),kind:'文件夹',group:id,version:'目录快照'};return folders.find(f=>f.id===id)||files().find(f=>f.id===id||f.code===id)||components().find(c=>c.id===id);}
+function snapshot(id){const o=object(id);if(!o)return null;return {...o,path:path(o.id),files:(o.kind==='文件夹'?folderFiles(id):o.kind==='构件'?[object(o.file)]:[o]).map(f=>({id:f.id,name:f.name,code:f.code,version:f.version})),created:new Date().toISOString()};}
+function addFiles(list,parent){const folder=folders.find(f=>f.id===parent);if(!folder)throw Error('请选择具体子目录');const out=Array.from(list).map(file=>({id:'upload-'+crypto.randomUUID(),code:'UP-'+crypto.randomUUID().slice(0,8).toUpperCase(),name:file.name,format:file.name.split('.').pop().toUpperCase(),kind:'文件',group:folder.group,parent,version:'V1',status:'已上传',owner:'当前用户',source:'成果资料库上传 · 文件索引',size:file.size,updated:new Date().toISOString().slice(0,10)}));state.uploads.push(...out);save();return out;}
+function removeFile(id){if(!files().some(f=>f.id===id))return;state.deleted.push(id);save();}
+function restoreFile(id){state.deleted=state.deleted.filter(x=>x!==id);save();}
+function save(){try{sessionStorage.setItem(key,JSON.stringify(state));}catch{}}
+function href(o){return (o.kind==='构件'?'gis.html?object=':'file-management.html?selected=')+encodeURIComponent(o.id);}
+return{state,groups,folders,addFiles,removeFile,restoreFile,allFiles,folderFiles,children,path,files,components,object,snapshot,save,href};
+})();
