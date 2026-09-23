@@ -1,0 +1,25 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs'),vm=require('node:vm'),crypto=require('node:crypto');
+const source=fs.readFileSync(require('node:path').join(__dirname,'../js/design-data.js'),'utf8');
+function load(storage={}){let events=0;const context={window:{},crypto,Date,JSON,Map,Set,console,CustomEvent:function(type){this.type=type;},document:{dispatchEvent(){events++;}},sessionStorage:{getItem:k=>storage[k],setItem:(k,v)=>storage[k]=v}};vm.createContext(context);vm.runInContext(source,context);return {D:context.window.DESIGN_DATA,storage,events:()=>events};}
+const {D,storage,events}=load();
+assert.equal(D.files().length,32);assert.ok(D.state.issues.length>0&&D.state.reviews.length>0&&D.state.shares.length>0);
+const folder=D.addFolder('校审成果','road-route'),sub=D.addFolder('送审',''+folder.id);
+const [f]=D.addFiles([{name:'A.ICD',size:128}],sub.id);assert.ok(D.folderFiles('road').some(x=>x.id===f.id));assert.ok(D.folderFiles(folder.id).some(x=>x.id===f.id));assert.ok(D.path(f.id).includes('路线设计 / 校审成果 / 送审 / A.ICD'));
+const review=D.createRecord('review',[f.id,'road-drawing'],{title:'双文件测试',person:'桥梁设计组',due:'2026-10-01',approver:'项目负责人',workflow:'两步审批'});assert.equal(review.target.files.length,2);assert.equal(D.object(f.id).status,'审阅中');
+assert.throws(()=>D.reviewAction(review.id,'approve'),/先完成审阅/);
+const share=D.createRecord('transmittal',folder.id,{title:'目录快照',person:'项目负责人'});assert.equal(share.target.files.length,1);
+D.newVersion(f.id,{name:'B.ICD',size:256});assert.equal(D.object(f.id).name,'A.ICD');assert.equal(D.object(f.id).version,'V2');assert.equal(share.target.files[0].version,'V1');assert.equal(review.target.files.find(x=>x.id===f.id).version,'V1');
+D.addFiles([{name:'C.ICD',size:64}],sub.id);assert.equal(share.target.files.length,1);
+D.reviewAction(review.id,'submit','复核通过');assert.equal(review.status,'进行中');assert.equal(review.step,2);D.reviewAction(review.id,'approve','批准');assert.equal(review.status,'已关闭');assert.equal(review.result,'已批准');assert.equal(D.object(f.id).reviewStatus,'未提交');assert.equal(D.object('road-drawing').reviewStatus,'已批准');assert.equal(D.versions(f.id).find(x=>x.version==='V1').reviewStatus,'已批准');
+assert.throws(()=>D.reviewAction(review.id,'reject'),/已结束/);
+const issue=D.createRecord('issue','RD-PAVE',{title:'构件问题',person:'路线设计组',description:'路面厚度复核',due:'2026-10-01'});assert.equal(issue.target.kind,'构件');D.updateIssue(issue.id,'处理中');D.updateIssue(issue.id,'已关闭','已核对');assert.equal(issue.history.length,3);
+D.receiveTransmittal(share.id);assert.equal(share.recipientStatus,'已确认');assert.equal(share.status,'已发送');const count=share.history.length;D.receiveTransmittal(share.id);assert.equal(share.history.length,count);
+const copied=D.copyFiles([f.id],'bridge-general')[0];assert.equal(copied.version,'V1');assert.equal(copied.reviewStatus,'未提交');assert.notEqual(copied.id,f.id);assert.equal(copied.group,'bridge');D.moveFiles([f.id],'road-pavement');assert.equal(D.object(f.id).parent,'road-pavement');assert.equal(share.target.files[0].parent,sub.id);
+D.removeFile(f.id);assert.equal(D.object(f.id),undefined);assert.equal(share.target.files.length,1);D.restoreFile(f.id);assert.equal(D.object(f.id).version,'V2');assert.ok(D.history(f.id).length>=6);
+const reloaded=load(storage).D;assert.equal(reloaded.object(f.id).version,'V2');assert.equal(reloaded.state.shares.find(x=>x.id===share.id).target.files[0].version,'V1');assert.equal(reloaded.state.issues.find(x=>x.id===issue.id).status,'已关闭');assert.ok(events()>10);
+const modelReview=D.createRecord('review','road-model',{title:'模型审批',person:'项目负责人',due:'2026-10-01',workflow:'单步审批'});D.state.models.road={version:'V2',updated:'2026-09-22'};D.save();D.reviewAction(modelReview.id,'approve');assert.equal(D.object('road-model').version,'V2');assert.notEqual(D.object('road-model').reviewStatus,'已批准');assert.equal(modelReview.target.files[0].version,'V1');
+assert.throws(()=>D.addFiles([{name:'empty.PDF',size:0}],'road-route'),/空文件/);assert.throws(()=>D.newVersion(f.id,{name:'wrong.PDF',size:1}),/类型/);assert.throws(()=>D.addFolder('送审',folder.id),/同名/);
+const legacy=load({'design-road-v1':JSON.stringify({params:{lanes:6},issues:[{id:'D-ISS-090',title:'旧问题',status:'待处理',target:issue.target}],shares:[{id:'D-TR-080',title:'旧分发',status:'待确认',target:share.target}],reviews:[{id:'REV-070',title:'旧审阅',status:'已批准',target:review.target}]})}).D;assert.equal(legacy.state.issues[0].status,'未解决');assert.equal(legacy.state.shares[0].status,'已发送');assert.equal(legacy.state.reviews[0].status,'已关闭');assert.equal(legacy.state.reviews[0].result,'已批准');assert.equal(legacy.state.params.lanes,6);
+const voided=D.voidTransmittal(share.id,'版本发行有误');assert.equal(voided.status,'作废');assert.throws(()=>D.receiveTransmittal(share.id),/作废/);assert.equal(voided.target.files[0].version,'V1');
+console.log('PASS: state assertions; snapshots, version-specific approvals, nested folders, uploads, copies, moves, recycle, issue lifecycle, receipt, persistence and model archive protection.');
